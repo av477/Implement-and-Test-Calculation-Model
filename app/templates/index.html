@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Calculator</title>
+    <style>
+        :root {
+            --bg: #f4f6fa;
+            --card: #ffffff;
+            --text: #1d2433;
+            --muted: #5b6475;
+            --border: #cfd5e1;
+            --accent: #2f5bd3;
+            --ok-bg: #e8f5ec;
+            --ok-text: #1f6b3a;
+            --err-bg: #fdecec;
+            --err-text: #a12828;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 16px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        }
+        main {
+            width: 100%;
+            max-width: 380px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+        }
+        h1 { margin: 0 0 4px; font-size: 1.5rem; }
+        p.hint { margin: 0 0 20px; color: var(--muted); font-size: 0.9rem; }
+        label { display: block; margin: 12px 0 4px; font-weight: 600; font-size: 0.9rem; }
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            font: inherit;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        button {
+            margin-top: 20px;
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:disabled { opacity: 0.6; cursor: wait; }
+        #result {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            min-height: 1.5em;
+        }
+        #result:empty { display: none; }
+        #result.ok { background: var(--ok-bg); color: var(--ok-text); }
+        #result.error { background: var(--err-bg); color: var(--err-text); }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Calculator</h1>
+    <p class="hint">Enter two numbers, pick an operation, and press Calculate.</p>
+
+    <form id="calc-form" novalidate>
+        <label for="a">First number (a)</label>
+        <input id="a" name="a" type="number" step="any" placeholder="e.g. 10" required>
+
+        <label for="b">Second number (b)</label>
+        <input id="b" name="b" type="number" step="any" placeholder="e.g. 5" required>
+
+        <label for="type">Operation</label>
+        <select id="type" name="type">
+            <option value="Add">Add (a + b)</option>
+            <option value="Sub">Sub (a − b)</option>
+            <option value="Multiply">Multiply (a × b)</option>
+            <option value="Divide">Divide (a ÷ b)</option>
+        </select>
+
+        <button id="calculate" type="submit">Calculate</button>
+    </form>
+
+    <div id="result" role="status" aria-live="polite"></div>
+</main>
+
+<script>
+    const form = document.getElementById("calc-form");
+    const output = document.getElementById("result");
+    const button = document.getElementById("calculate");
+
+    function show(text, kind) {
+        output.textContent = text;
+        output.className = kind;
+    }
+
+    // FastAPI returns either {"detail": "message"} or, for validation errors,
+    // {"detail": [{"msg": "Value error, message"}, ...]}.
+    function errorMessage(body) {
+        const detail = body && body.detail;
+        if (Array.isArray(detail) && detail.length) {
+            return detail[0].msg.replace(/^Value error, /, "");
+        }
+        return typeof detail === "string" ? detail : "Something went wrong";
+    }
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const a = document.getElementById("a").value;
+        const b = document.getElementById("b").value;
+        const type = document.getElementById("type").value;
+
+        if (a.trim() === "" || b.trim() === "") {
+            show("Error: Please enter both numbers", "error");
+            return;
+        }
+
+        button.disabled = true;
+        try {
+            const response = await fetch("/calculate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ a: Number(a), b: Number(b), type }),
+            });
+            const body = await response.json();
+            if (response.ok) {
+                show(`Result: ${body.result}`, "ok");
+            } else {
+                show(`Error: ${errorMessage(body)}`, "error");
+            }
+        } catch (err) {
+            show("Error: Could not reach the server", "error");
+        } finally {
+            button.disabled = false;
+        }
+    });
+</script>
+</body>
+</html>

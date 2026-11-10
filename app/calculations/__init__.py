@@ -1,25 +1,5 @@
-"""Calculation logic (Factory pattern), kept free of database code."""
+"""Calculation types and errors (no database code)."""
 
-from app.calculations.factory import (
-    AddOperation,
-    CalculationError,
-    CalculationFactory,
-    CalculationType,
-    DivideOperation,
-    MultiplyOperation,
-    Operation,
-    SubOperation,
-    compute_result,
-)
+from app.calculations.types import CalculationError, CalculationType
 
-__all__ = [
-    "AddOperation",
-    "CalculationError",
-    "CalculationFactory",
-    "CalculationType",
-    "DivideOperation",
-    "MultiplyOperation",
-    "Operation",
-    "SubOperation",
-    "compute_result",
-]
+__all__ = ["CalculationError", "CalculationType"]

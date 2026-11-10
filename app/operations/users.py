@@ -1,8 +1,10 @@
 """Database operations for users."""
 
+from uuid import UUID
+
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.auth.security import hash_password, verify_password
 from app.models import User
@@ -32,8 +34,20 @@ def create_user(db: Session, user_in: UserCreate) -> User:
     return user
 
 
-def get_user(db: Session, user_id: int) -> User | None:
+def get_user(db: Session, user_id: UUID) -> User | None:
     return db.get(User, user_id)
+
+
+def get_user_with_calculations(db: Session, user_id: UUID) -> User | None:
+    """Load a user and all their calculations in two queries.
+
+    Without ``selectinload``, ``user.calculations`` would be loaded lazily,
+    with an extra query the first time it's used. ``selectinload`` fetches
+    them right away with one ``SELECT ... WHERE user_id IN (...)``, which also
+    stays at two queries when loading many users at once (no "N+1" problem).
+    """
+    query = select(User).where(User.id == user_id).options(selectinload(User.calculations))
+    return db.scalar(query)
 
 
 def get_user_by_login(db: Session, login: str) -> User | None:

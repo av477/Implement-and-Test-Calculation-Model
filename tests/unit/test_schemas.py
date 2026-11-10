@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -64,7 +65,7 @@ def test_missing_field_is_rejected(missing):
 
 def test_user_read_omits_password_hash():
     orm_like = SimpleNamespace(
-        id=1,
+        id=uuid.uuid4(),
         username="alice_01",
         email="alice@example.com",
         password_hash="$2b$12$secret",

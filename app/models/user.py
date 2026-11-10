@@ -1,21 +1,20 @@
-"""SQLAlchemy ORM models."""
+"""SQLAlchemy model for a user."""
 
+import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Integer, String, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DateTime, String, Uuid, func, select
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
 from app.database import Base
-
-if TYPE_CHECKING:  # pragma: no cover - only for type checkers
-    from app.models.calculation import Calculation
+from app.models.calculation import Calculation
 
 
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # A random UUID instead of 1, 2, 3...: ids can't be guessed or counted.
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     # unique=True creates a UNIQUE constraint in PostgreSQL, so duplicates are
     # rejected by the database itself, not only by application code.
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
@@ -27,10 +26,23 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    # A user's saved calculations. passive_deletes lets the database's
-    # ON DELETE CASCADE remove them when the user is deleted.
-    calculations: Mapped[list["Calculation"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    # A user's saved calculations, oldest first. passive_deletes lets the
+    # database's ON DELETE CASCADE remove them when the user is deleted.
+    calculations: Mapped[list[Calculation]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by=(Calculation.created_at, Calculation.id),
+    )
+
+    # How many calculations this user has. It isn't a real column: it's a
+    # correlated subquery that PostgreSQL runs as part of the SELECT that loads
+    # the user, so you get the count without loading the calculations.
+    calculation_count: Mapped[int] = column_property(
+        select(func.count(Calculation.id))
+        .where(Calculation.user_id == id)
+        .correlate_except(Calculation)
+        .scalar_subquery()
     )
 
     def __repr__(self) -> str:

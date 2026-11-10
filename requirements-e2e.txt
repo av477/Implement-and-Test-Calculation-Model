@@ -1,0 +1,5 @@
+# Browser (end-to-end) tests. Kept out of requirements.txt so the Docker image
+# doesn't ship a browser driver. Install with: pip install -r requirements-e2e.txt
+-r requirements.txt
+playwright==1.65.0
+pytest-playwright==0.10.0

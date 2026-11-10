@@ -2,10 +2,12 @@
 
 import re
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.auth.security import BCRYPT_MAX_BYTES
+from app.schemas.calculation import CalculationRead
 
 USERNAME_PATTERN = r"^[A-Za-z0-9_.-]+$"
 
@@ -53,7 +55,7 @@ class UserRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     username: str
     email: EmailStr
     created_at: datetime
@@ -64,3 +66,10 @@ class UserLogin(BaseModel):
 
     username: str
     password: str
+
+
+class UserCalculations(UserRead):
+    """A user together with their calculations (GET /users/{id}/calculations)."""
+
+    calculation_count: int
+    calculations: list[CalculationRead]
