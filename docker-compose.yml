@@ -1,0 +1,33 @@
+services:
+  db:
+    # Pinned to 17: the postgres:18 image moved its data directory, which
+    # breaks the classic /var/lib/postgresql/data volume mount used below.
+    image: postgres:17
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppassword
+      POSTGRES_DB: secure_users
+    ports:
+      # Override with DB_PORT=5434 if 5432 is already used on your machine.
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d secure_users"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      # Inside the compose network Postgres is reached by its service name.
+      DATABASE_URL: postgresql+psycopg2://appuser:apppassword@db:5432/secure_users
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
