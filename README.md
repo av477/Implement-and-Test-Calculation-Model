@@ -13,6 +13,22 @@ It has unit, integration and Playwright browser tests, and a GitHub Actions
 pipeline that pushes a Docker image to Docker Hub when the tests pass.
 
 **Docker Hub repository:** [av477/calculation-model](https://hub.docker.com/r/av477/calculation-model)
+(the image is published after the first successful pipeline run on `main`)
+
+## Assignment checklist
+
+| Requirement | How it is met |
+|---|---|
+| Calculation model with SQLAlchemy (no raw SQL): `id`, `a`, `b`, `type`, `result` | `Calculation` in [`app/models/calculation.py`](app/models/calculation.py), plus `user_id`, `created_at`, `updated_at` |
+| Store the result or compute on demand | Stored when the calculation is created (see [Design choices](#design-choices)) |
+| `user_id` is a valid foreign key | Required UUID foreign key to `users.id`; unknown users are rejected |
+| `CalculationCreate` receives `a`, `b`, `type` (Add, Sub, Multiply, Divide) | [`app/schemas/calculation.py`](app/schemas/calculation.py), which also takes `user_id` |
+| `CalculationRead` returns `id`, `a`, `b`, `type`, `result`, ... | Same file, also returns `user_id`, `created_at`, `updated_at` |
+| Validations: no zero divisor, correct type | Pydantic validators, plus `@validates` and `CHECK` constraints in the database |
+| Factory (optional) | `Calculation.create()` returns `Addition`, `Subtraction`, `Multiplication` or `Division` |
+| Unit tests: each operation, factory picks the right one, invalid `CalculationCreate` input | [`tests/unit/`](tests/unit) |
+| Integration tests with PostgreSQL in GitHub Actions: stored data is correct, error cases | [`tests/integration/`](tests/integration), run in CI against a `postgres:17` service |
+| CI/CD: run all tests (user + calculation), push to Docker Hub on success | [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) |
 
 ## Features
 
@@ -21,7 +37,7 @@ pipeline that pushes a Docker image to Docker Hub when the tests pass.
 | SQLAlchemy `Calculation` model: `id` (UUID), `user_id` (UUID foreign key to `users.id`, required), `type`, `a`, `b`, `result`, `created_at`, `updated_at` | [`app/models/calculation.py`](app/models/calculation.py) |
 | Polymorphic subclasses `Addition`, `Subtraction`, `Multiplication`, `Division` (single-table inheritance, `type` is the discriminator) | [`app/models/calculation.py`](app/models/calculation.py) |
 | Factory: `Calculation.create(type, a, b, user_id)` returns the right subclass with its result filled in | [`app/models/calculation.py`](app/models/calculation.py) |
-| `CalculationCreate` (a, b, type, user_id), `CalculationRead`, `CalculationUpdate` | [`app/schemas/calculation.py`](app/schemas/calculation.py) |
+| `CalculationCreate` (a, b, type, user_id), `CalculationRead`, `CalculationUpdate`, `CalculationResult` | [`app/schemas/calculation.py`](app/schemas/calculation.py) |
 | Create, get, list and update calculations | [`app/operations/calculations.py`](app/operations/calculations.py) |
 | Calculator web page at `/` (Jinja2 template) | [`app/templates/index.html`](app/templates/index.html) |
 | Alembic migrations (used by Docker Compose, the Docker image, CI and the tests) | [`alembic/`](alembic) |
@@ -210,7 +226,7 @@ DB_PORT=5434 API_PORT=8001 docker compose up --build
 If you ran an earlier version of this project with Docker Compose, its database
 still has old tables that were made without Alembic, and the first migration
 would fail because they already exist. Delete the old database volume once
-before starting:
+before starting (this also deletes the users and calculations stored in it):
 
 ```bash
 docker compose down -v
@@ -269,9 +285,9 @@ docker network rm calc-net
 
 Run the unit tests with `pytest tests/unit` (no database required). Integration
 and browser tests use a disposable PostgreSQL database; set `DATABASE_URL` to
-that test database before running them. The integration tests drop and
-recreate the `users` and `calculations` tables, so do not point them at
-production or other data you need.
+that test database before running them. Both drop and rebuild the `users` and
+`calculations` tables, so do not point them at production or other data you
+need.
 
 ```bash
 python -m venv .venv
@@ -279,6 +295,7 @@ source .venv/bin/activate            # macOS/Linux
 # Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements-e2e.txt   # app + test tools + Playwright
 playwright install chromium          # one-time browser download for the e2e tests
+                                     # (on Linux: playwright install --with-deps chromium)
 
 # Unit tests need no database
 pytest tests/unit --cov=app
@@ -295,20 +312,29 @@ pytest tests/e2e
 
 Add `--headed` to the last command to watch the browser while the tests run.
 
-The integration and browser tests build the tables themselves with the
-migrations. To run the app on your own machine instead (with
-`uvicorn app.main:app --reload`), apply the migrations first:
-
-```bash
-alembic upgrade head
-```
-
 In Windows PowerShell, set the database URL with
 `$env:DATABASE_URL = "postgresql+psycopg2://ci_user:ci_password@localhost:5433/ci_users"` instead of `export`.
 Before running the integration tests, check that PostgreSQL is ready with
 `docker exec test-db pg_isready -U ci_user -d ci_users`; repeat until it reports
 that the server is accepting connections. Stop the disposable database with
 `docker stop test-db` after the tests finish.
+
+The integration and browser tests build the tables themselves with the
+migrations.
+
+### Run the app without Docker
+
+The app needs PostgreSQL with the tables created by the migrations. With
+`DATABASE_URL` unset it uses `appuser:apppassword@localhost:5432/secure_users`,
+which is the database Docker Compose starts:
+
+```bash
+docker compose up -d db
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+Then open `http://localhost:8000/`.
 
 Each integration test runs inside a transaction that is rolled back afterwards, so tests don't affect one another.
 
@@ -372,13 +398,13 @@ app/
     types.py         CalculationType (Add/Sub/Multiply/Divide), CalculationError
   models/
     calculation.py   Calculation base + Addition/Subtraction/Multiplication/Division, factory
-    user.py          SQLAlchemy User model
+    user.py          SQLAlchemy User model with calculation_count
   operations/
     calculations.py  create / get / list / update calculations
-    users.py         create / get / authenticate users
+    users.py         create / get / authenticate users, load a user with calculations
   schemas/
-    calculation.py   Pydantic CalculationCreate / CalculationRead / CalculationUpdate
-    user.py          Pydantic UserCreate / UserRead / UserLogin
+    calculation.py   Pydantic CalculationCreate / CalculationRead / CalculationUpdate / CalculationResult
+    user.py          Pydantic UserCreate / UserRead / UserLogin / UserCalculations
   templates/
     index.html       calculator page
   config.py          settings from environment variables
@@ -386,7 +412,7 @@ app/
   main.py            FastAPI routes
 tests/
   unit/              model, factory, schema and hashing tests
-  integration/       PostgreSQL model and API tests
+  integration/       PostgreSQL model, API, migration and advanced SQLAlchemy tests
   e2e/               Playwright browser tests
   migrations.py      helper that builds the test database with Alembic
 alembic/
