@@ -1,20 +1,22 @@
 """Fixtures for tests that need a real PostgreSQL database (DATABASE_URL)."""
 
 import pytest
+from alembic import command
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.database import Base, engine, get_db
+from app.database import engine, get_db
 from app.main import app
+from tests.migrations import alembic_config, reset_and_migrate
 
 
 @pytest.fixture(scope="session", autouse=True)
 def create_schema():
-    """Build the tables once for the whole run, and drop them afterwards."""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    """Build the tables once with the Alembic migrations, the same way
+    production does, and remove them afterwards with the downgrade."""
+    reset_and_migrate(engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    command.downgrade(alembic_config(), "base")
 
 
 @pytest.fixture

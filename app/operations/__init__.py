@@ -5,6 +5,7 @@ from app.operations.calculations import (
     create_calculation,
     get_calculation,
     list_calculations,
+    update_calculation,
 )
 from app.operations.users import (
     DuplicateUserError,
@@ -12,6 +13,7 @@ from app.operations.users import (
     create_user,
     get_user,
     get_user_by_login,
+    get_user_with_calculations,
 )
 
 __all__ = [
@@ -23,5 +25,7 @@ __all__ = [
     "get_calculation",
     "get_user",
     "get_user_by_login",
+    "get_user_with_calculations",
     "list_calculations",
+    "update_calculation",
 ]

@@ -44,7 +44,12 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-e2e.txt
+
+      - name: Apply migrations and check they match the models
+        run: |
+          alembic upgrade head
+          alembic check
 
       - name: Unit tests
         run: pytest tests/unit -m unit --cov=app --cov-report=term-missing
@@ -55,6 +60,12 @@ jobs:
           --cov=app --cov-append --cov-fail-under=90
           --cov-report=term-missing --cov-report=xml
           --junitxml=test-results/junit.xml
+
+      - name: Install Chromium for Playwright
+        run: playwright install --with-deps chromium
+
+      - name: End-to-end browser tests (Playwright)
+        run: pytest tests/e2e -m e2e --junitxml=test-results/e2e-junit.xml
 
       - name: Upload test results
         if: always()

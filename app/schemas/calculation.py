@@ -2,20 +2,20 @@
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, FiniteFloat, field_validator, model_validator
 
-from app.calculations.factory import CalculationType
+from app.calculations.types import CalculationType
 
 
-class CalculationCreate(BaseModel):
-    """Data needed to create a calculation."""
+class CalculationBase(BaseModel):
+    """The numbers and the operation. Shared by the create and calculate requests."""
 
-    # allow_inf_nan=False rejects "inf" and "nan", which aren't real inputs.
-    a: float = Field(allow_inf_nan=False)
-    b: float = Field(allow_inf_nan=False)
+    # FiniteFloat rejects "inf" and "nan", which aren't real inputs.
+    a: FiniteFloat
+    b: FiniteFloat
     type: CalculationType
-    user_id: int | None = Field(default=None, gt=0)
 
     @field_validator("type", mode="before")
     @classmethod
@@ -28,10 +28,38 @@ class CalculationCreate(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def check_divisor(self) -> "CalculationCreate":
+    def check_divisor(self) -> "CalculationBase":
         if self.type is CalculationType.DIVIDE and self.b == 0:
             raise ValueError("b must not be zero for Divide")
         return self
+
+
+class CalculationCreate(CalculationBase):
+    """Data needed to save a calculation for a user."""
+
+    user_id: UUID
+
+
+class CalculationUpdate(BaseModel):
+    """New numbers for an existing calculation. Its type can't change."""
+
+    a: FiniteFloat | None = None
+    b: FiniteFloat | None = None
+
+    @model_validator(mode="after")
+    def check_not_empty(self) -> "CalculationUpdate":
+        if self.a is None and self.b is None:
+            raise ValueError("give a new value for a, b or both")
+        return self
+
+
+class CalculationResult(BaseModel):
+    """Answer from /calculate (nothing is saved)."""
+
+    a: float
+    b: float
+    type: CalculationType
+    result: float
 
 
 class CalculationRead(BaseModel):
@@ -39,10 +67,11 @@ class CalculationRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
+    user_id: UUID
+    type: CalculationType
     a: float
     b: float
-    type: CalculationType
     result: float
-    user_id: int | None
     created_at: datetime
+    updated_at: datetime

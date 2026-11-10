@@ -18,6 +18,16 @@ services:
       timeout: 5s
       retries: 10
 
+  # Runs "alembic upgrade head" once to create or update the tables, then exits.
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://appuser:apppassword@db:5432/secure_users
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build: .
     environment:
@@ -28,6 +38,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   pgdata:

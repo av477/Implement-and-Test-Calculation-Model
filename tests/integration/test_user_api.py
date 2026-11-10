@@ -1,5 +1,7 @@
 """HTTP API tests: FastAPI + Pydantic validation + real PostgreSQL."""
 
+import uuid
+
 import pytest
 
 pytestmark = pytest.mark.integration
@@ -64,8 +66,17 @@ def test_get_user_by_id(client):
     assert "password_hash" not in response.json()
 
 
+def test_user_id_is_a_uuid(client):
+    user_id = register(client).json()["id"]
+    assert str(uuid.UUID(user_id)) == user_id
+
+
 def test_get_missing_user_returns_404(client):
-    assert client.get("/users/999999").status_code == 404
+    assert client.get(f"/users/{uuid.uuid4()}").status_code == 404
+
+
+def test_get_user_with_malformed_id_returns_422(client):
+    assert client.get("/users/123").status_code == 422
 
 
 def test_verify_credentials(client):
